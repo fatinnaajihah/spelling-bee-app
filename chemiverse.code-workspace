@@ -1,8 +1,286 @@
-{
-	"folders": [
-		{
-			"path": "../chemiverse"
-		}
-	],
-	"settings": {}
-}
+import { Hono } from 'hono'
+import { serveStatic } from 'hono/serve-static'
+
+const app = new Hono()
+
+// Serve static files
+app.use('/static/*', serveStatic({ root: './' }))
+
+// Serve the main spelling bee page
+app.get('/', (c) => {
+  return c.html(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Kid's Spelling Bee Fun! 🐝</title>
+      <style>
+        body {
+          font-family: 'Comic Sans MS', cursive;
+          text-align: center;
+          background-color: #fff3d4;
+          margin: 0;
+          padding: 20px;
+        }
+        .container {
+          max-width: 800px;
+          margin: 0 auto;
+        }
+        h1 {
+          color: #f7b731;
+          text-shadow: 2px 2px #000;
+        }
+        .word-display {
+          font-size: 2em;
+          margin: 20px;
+          color: #333;
+        }
+        .input-area {
+          margin: 20px;
+        }
+        input {
+          font-size: 1.2em;
+          padding: 10px;
+          border-radius: 10px;
+          border: 2px solid #f7b731;
+        }
+        button {
+          font-size: 1.2em;
+          padding: 10px 20px;
+          background-color: #f7b731;
+          border: none;
+          border-radius: 10px;
+          cursor: pointer;
+          margin: 10px;
+        }
+        .result {
+          font-size: 1.5em;
+          margin: 20px;
+        }
+        .bee {
+          font-size: 5em;
+          animation: float 2s ease-in-out infinite;
+        }
+        @keyframes float {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-20px); }
+        }
+        button:hover {
+          transform: scale(1.1);
+          transition: transform 0.2s;
+          background-color: #ffc107;
+        }
+        
+        .score {
+          font-size: 1.5em;
+          color: #4a4a4a;
+          margin: 20px;
+        }
+        
+        .streak-stars {
+          font-size: 2em;
+          margin: 10px;
+        }
+        
+        .hint {
+          color: #666;
+          font-size: 1.2em;
+          margin: 10px;
+        }
+        
+        .difficulty-select {
+          margin: 20px;
+          padding: 10px;
+        }
+        
+        .difficulty-btn {
+          font-size: 1.2em;
+          padding: 10px 20px;
+          margin: 0 10px;
+          border: none;
+          border-radius: 10px;
+          cursor: pointer;
+        }
+        
+        .difficulty-btn.easy {
+          background-color: #98FB98;
+        }
+        
+        .difficulty-btn.medium {
+          background-color: #FFA500;
+        }
+        
+        .difficulty-btn.hard {
+          background-color: #FF6B6B;
+        }
+        
+        .difficulty-btn.active {
+          transform: scale(1.1);
+          box-shadow: 0 0 10px rgba(0,0,0,0.2);
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="bee">🐝</div>
+        <h1>Spelling Bee Fun!</h1>
+        <div class="difficulty-select">
+          <button class="difficulty-btn easy active" onclick="setDifficulty('easy')">Easy</button>
+          <button class="difficulty-btn medium" onclick="setDifficulty('medium')">Medium</button>
+          <button class="difficulty-btn hard" onclick="setDifficulty('hard')">Hard</button>
+        </div>
+        <div class="score">Score: <span id="scoreDisplay">0</span></div>
+        <div class="streak-stars" id="streakStars"></div>
+        <div class="word-display" id="wordDisplay"></div>
+        <div class="hint" id="hint"></div>
+        <div class="input-area">
+          <input type="text" id="userInput" placeholder="Type the word here..." autocomplete="off">
+          <button onclick="checkSpelling()">Submit</button>
+          <button onclick="playWord()">Hear Word Again</button>
+          <button onclick="showHint()">Need a Hint?</button>
+        </div>
+        <div class="result" id="result"></div>
+      </div>
+
+      <script>
+        const wordsByDifficulty = {
+          easy: [
+            { word: 'cat', hint: 'A furry pet that meows' },
+            { word: 'dog', hint: 'A pet that barks' },
+            { word: 'sun', hint: 'It lights up the day' },
+            { word: 'hat', hint: 'You wear it on your head' },
+            { word: 'bed', hint: 'Where you sleep at night' }
+          ],
+          medium: [
+            { word: 'happy', hint: 'How you feel on your birthday' },
+            { word: 'sunny', hint: 'When the sky is bright and clear' },
+            { word: 'flower', hint: 'A pretty plant that grows in gardens' },
+            { word: 'puppy', hint: 'A baby dog' },
+            { word: 'cookie', hint: 'A sweet, round treat' }
+          ],
+          hard: [
+            { word: 'butterfly', hint: 'A beautiful insect with colorful wings' },
+            { word: 'playground', hint: 'Where kids go to play and have fun' },
+            { word: 'elephant', hint: 'A large gray animal with a trunk' },
+            { word: 'chocolate', hint: 'A sweet brown candy' },
+            { word: 'dinosaur', hint: 'An extinct ancient animal' }
+          ]
+        };
+        
+        let currentDifficulty = 'easy';
+        let currentWord = '';
+        let currentHint = '';
+        let score = 0;
+        let streak = 0;
+
+        function setDifficulty(difficulty) {
+          // Update active button styling
+          document.querySelectorAll('.difficulty-btn').forEach(btn => {
+            btn.classList.remove('active');
+          });
+          document.querySelector('.difficulty-btn.' + difficulty).classList.add('active');
+          
+          currentDifficulty = difficulty;
+          score = 0;
+          streak = 0;
+          document.getElementById('scoreDisplay').textContent = score;
+          updateStreakStars();
+          newWord();
+        }
+
+        function getPointsForDifficulty() {
+          const points = {
+            easy: 5,
+            medium: 10,
+            hard: 15
+          };
+          return points[currentDifficulty];
+        }
+
+        function newWord() {
+          const words = wordsByDifficulty[currentDifficulty];
+          const wordObj = words[Math.floor(Math.random() * words.length)];
+          currentWord = wordObj.word;
+          currentHint = wordObj.hint;
+          document.getElementById('hint').textContent = '';
+          // Don't automatically play word on correct answer
+          updateStreakStars();
+        }
+
+        function showHint() {
+          document.getElementById('hint').textContent = '💡 Hint: ' + currentHint;
+        }
+
+        function updateScore(correct) {
+          if (correct) {
+            score += getPointsForDifficulty();
+            streak += 1;
+          } else {
+            streak = 0;
+          }
+          document.getElementById('scoreDisplay').textContent = score;
+          updateStreakStars();
+        }
+
+        function updateStreakStars() {
+          document.getElementById('streakStars').textContent = '⭐'.repeat(streak);
+        }
+
+        function playWord() {
+          // Cancel any ongoing speech first
+          speechSynthesis.cancel();
+          
+          // Small delay to ensure previous speech is cancelled
+          setTimeout(() => {
+            const utterance = new SpeechSynthesisUtterance(currentWord);
+            // Adjust speech rate based on difficulty
+            utterance.rate = {
+              easy: 0.7,
+              medium: 0.8,
+              hard: 0.9
+            }[currentDifficulty];
+            speechSynthesis.speak(utterance);
+          }, 100);
+        }
+
+        function checkSpelling() {
+          const input = document.getElementById('userInput').value.toLowerCase();
+          const resultDiv = document.getElementById('result');
+          
+          if (input === currentWord) {
+            resultDiv.innerHTML = '🎉 Correct! Great job! 🎉';
+            updateScore(true);
+            // Add a "Next Word" button instead of auto-playing
+            resultDiv.innerHTML += '<br><button onclick="nextWord()" style="margin-top: 10px">Next Word →</button>';
+            document.getElementById('userInput').value = '';
+          } else {
+            resultDiv.innerHTML = '❌ Try again! ❌';
+            updateScore(false);
+          }
+        }
+
+        // Add new function for handling next word
+        function nextWord() {
+          newWord();
+          playWord(); // Only play when explicitly moving to next word
+          document.getElementById('result').innerHTML = '';
+        }
+
+        // Handle Enter key
+        document.getElementById('userInput').addEventListener('keypress', function(e) {
+          if (e.key === 'Enter') {
+            checkSpelling();
+          }
+        });
+
+        // Start the game
+        window.onload = () => {
+          newWord();
+          // Don't auto-play on load, let user click "Hear Word" button first
+        };
+      </script>
+    </body>
+    </html>
+  `)
+})
+
+export default app
